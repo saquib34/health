@@ -1,0 +1,6 @@
+/* src/styles/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Additional custom styles below if needed */

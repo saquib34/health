@@ -1,0 +1,6 @@
+
+
+/* Correct - use this instead */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
