@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 // API base URL - configured in .env file
-const API_URL = 'http://15.206.74.169:8000/api/';
+const API_URL = 'https://medical.saquib.in/api/';
 
 // Create axios instance
 const api = axios.create({
