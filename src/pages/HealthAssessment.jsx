@@ -126,20 +126,27 @@ const HealthAssessment = () => {
   
   // Handle completion of AI consultation and diagnosis
   const handleDiagnosisComplete = async (diagnosisData) => {
-    try {
-      setDiagnosisResult(diagnosisData);
-      setAssessmentState('analyzing');
-      
-      displayMessage("Analyzing your health data to provide a comprehensive assessment...");
-      speak("I'm analyzing all your health data now to provide a comprehensive assessment. This will take just a moment.");
-      
-      // Complete the full assessment
-      await completeHealthAssessment(diagnosisData);
-    } catch (error) {
-      console.error('Error processing diagnosis:', error);
-      toast.error('Failed to process diagnosis. Please try again.');
-    }
-  };
+  try {
+    // Normalize diagnosisData to ensure possibleConditions is an array
+    const normalizedData = {
+      ...diagnosisData,
+      possibleConditions: Array.isArray(diagnosisData?.possibleConditions)
+        ? diagnosisData.possibleConditions
+        : []
+    };
+    setDiagnosisResult(normalizedData);
+    setAssessmentState('analyzing');
+
+    displayMessage("Analyzing your health data to provide a comprehensive assessment...");
+    speak("I'm analyzing all your health data now to provide a comprehensive assessment. This will take just a moment.");
+
+    // Complete the full assessment with normalized data
+    await completeHealthAssessment(normalizedData);
+  } catch (error) {
+    console.error('Error processing diagnosis:', error);
+    toast.error('Failed to process diagnosis. Please try again.');
+  }
+};
   
   // Complete the health assessment process
   const completeHealthAssessment = async (diagnosisData) => {
@@ -571,16 +578,16 @@ const HealthAssessment = () => {
                     <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
                       <h4 className="font-medium text-blue-800 mb-2">Suggested Tests</h4>
                       <ul className="list-disc pl-5 mb-4 text-blue-800">
-                        {diagnosisResult.recommendedTests.map((test, index) => (
+                        {/* {diagnosisResult.recommendedTests.map((test, index) => (
                           <li key={index}>{test}</li>
-                        ))}
+                        ))} */}
                       </ul>
                       
                       <h4 className="font-medium text-blue-800 mb-2">Treatment Plan</h4>
                       <ul className="list-disc pl-5 text-blue-800">
-                        {diagnosisResult.treatmentRecommendations.map((rec, index) => (
+                        {/* {diagnosisResult.treatmentRecommendations.map((rec, index) => (
                           <li key={index}>{rec}</li>
-                        ))}
+                        ))} */}
                       </ul>
                     </div>
                   </div>
@@ -589,14 +596,25 @@ const HealthAssessment = () => {
                   <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-100 flex items-start">
                     <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2 flex-shrink-0 mt-0.5" />
                     <p className="text-sm text-yellow-800">
-                      This assessment is AI-generated and for informational purposes only. 
+                    {diagnosisResult ? (
+    <pre style={{ 
+      background: '#f5f5f5',
+      padding: '1rem',
+      borderRadius: '4px',
+      whiteSpace: 'pre-wrap'
+    }}>
+      {JSON.stringify(diagnosisResult, null, 2)}
+    </pre>
+  ) : (
+    <p>No data available</p>
+  )} This assessment is AI-generated and for informational purposes only. 
                       It is not a substitute for professional medical advice, diagnosis, or treatment.
                       Always consult with a qualified healthcare provider for medical concerns.
                     </p>
                   </div>
                   
                   {/* Doctor Recommendation */}
-                  {suggestedDoctor && (
+                  {/* {suggestedDoctor && (
                     <div>
                       <h3 className="text-lg font-medium text-gray-800 mb-3">Recommended Doctor</h3>
                       <div className="bg-white border rounded-lg p-4">
@@ -644,7 +662,7 @@ const HealthAssessment = () => {
                         </div>
                       </div>
                     </div>
-                  )}
+                  )} */}
                 </div>
               )}
             </div>
