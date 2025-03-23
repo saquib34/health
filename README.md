@@ -578,11 +578,9 @@ Please review our [Code of Conduct](CODE_OF_CONDUCT.md) and [Contributing Guidel
 
 ## 📧 Support & Contact
 
-- **Documentation**: [docs.healthai.com](https://docs.healthai.com)
-- **Help Center**: [support.healthai.com](https://support.healthai.com)
-- **Email**: contact@healthai.com
-- **Community Forum**: [community.healthai.com](https://community.healthai.com)
-- **Office Hours**: Schedule at [calendly.com/healthai-support](https://calendly.com/healthai-support)
+
+- **Email**: developer@saquib.in
+
 
 ## 📄 License
 
