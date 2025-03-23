@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 // API base URL - configured in .env file
-const API_URL = 'https://medical.saquib.in/api/';
+const API_URL = 'http://15.206.74.169:8000/api/';
 
 // Create axios instance
 const api = axios.create({
@@ -496,25 +496,84 @@ const predictDisease = async (symptoms, medicalHistory = null) => {
 };
 
 // Export the medical chat functions for application use
+// const conversationCache = [];
+
 export const medicalChatService = {
-  sendMessage: sendMedicalChatMessage,
-  sendUnifiedHealthChat: sendUnifiedHealthChatMessage,
-  resetSession: resetChatSession,
-  predictDisease: predictDisease,
-  
-  // Add the ability to analyze the intent of a message
-  analyzeIntent: async (message) => {
+  sendMessage: async (message, context = '') => {
     try {
-      const response = await api.post('/analyze-intent', { message });
+      // Fetch session token from localStorage
+      let sessionToken = localStorage.getItem('medical_chat_session_token');
+
+      // Enhance context with previous conversation if needed
+      let enhancedContext = context;
+      if (conversationCache.length > 0) {
+        const sessionContext = conversationCache
+          .map(item => `${item.role}: ${item.content}`)
+          .join('\n');
+        enhancedContext = `Previous conversation:\n${sessionContext}\n\n${context}`;
+      }
+      if (sessionToken === null || sessionToken === 'null' || sessionToken === '' || sessionToken === 'undefined') {
+        sessionToken='';
+      }
+
+      // Prepare payload
+      const payload = {
+        message: `${enhancedContext}\nUser: ${message}`,
+        session_token: sessionToken // Include session token, even if null
+      };
+
+      // Make API call to /analyze-intent
+      const response = await api.post('/analyze-intent', payload, {
+        timeout: 45000
+      });
+
+      // Update session token in localStorage if provided by backend
+      if (response.data.session_token) {
+        localStorage.setItem('medical_chat_session_token', response.data.session_token);
+      }
+
+      // Update conversation cache
+      if (response.data.response) {
+        while (conversationCache.length > 8) {
+          conversationCache.shift();
+        }
+        conversationCache.push({ role: 'user', content: message });
+        conversationCache.push({ role: 'assistant', content: response.data.response });
+      }
+
       return response.data;
     } catch (error) {
-      console.error('Intent analysis error:', error);
-      return { intent: 'unknown', confidence: 0 };
+      console.error('Medical chat error (/analyze-intent):', error);
+
+      if (error.response) {
+        const errorData = error.response.data || {};
+        const errorMsg = errorData.detail || 'Unknown server error';
+
+        if (error.response.status === 503) {
+          return { response: "I'm still initializing my medical knowledge base. Please try again in a moment.", error: 'model_loading' };
+        }
+        if (error.response.status === 429) {
+          return { response: "I've been receiving many requests. Please wait a moment before sending another message.", error: 'rate_limited' };
+        }
+        if (error.response.status === 500) {
+          return { response: "I'm experiencing technical difficulties. Please try again in a moment.", error: 'server_error' };
+        }
+        return { response: `I encountered an issue: ${errorMsg}. Please try again.`, error: 'api_error' };
+      } else if (error.isNetworkError) {
+        return { response: "I'm having trouble connecting to my knowledge base. Please check your network connection.", error: 'network' };
+      } else if (error.code === 'ECONNABORTED') {
+        return { response: "I'm taking longer than expected to process your query. Please try a simpler question or try again later.", error: 'timeout' };
+      }
+
+      return { response: "I encountered an issue while processing your request. Please try again with a different question.", error: 'unknown' };
     }
+  },
+  resetSession: () => {
+    localStorage.removeItem('medical_chat_session_token'); // Clear session token
+    conversationCache.length = 0; // Clear conversation cache
   }
 };
 
-// For backward compatibility
 export const medicalChatAPI = medicalChatService;
 
 // Health Assessment API
