@@ -171,23 +171,29 @@ if(result.verified){
     setIsLoading(true);
     try {
       const result = await authAPI.verifyFace(faceImage);
-      
+      console.log('Verify Face Result:', result);
+  
       if (result.verified) {
-        // User recognized
         localStorage.setItem('token', result.token);
-        
-        // Get full user profile
-        const { data } = await userAPI.getProfile();
-        const userData = data.user;
-        
-        setUser(userData);
-        setIsAuthenticated(true);
-        localStorage.setItem('user', JSON.stringify(userData));
-        
-        toast.success('Face verification successful!');
-        return { success: true, newUser: false };
+        try {
+          const { data } = await userAPI.getProfile();
+          const userData = data.user || { id: result.user_id, name: result.name }; // Fallback
+          setUser(userData);
+          setIsAuthenticated(true);
+          localStorage.setItem('user', JSON.stringify(userData));
+          toast.success('Face verification successful!');
+          return { success: true, newUser: false };
+        } catch (profileError) {
+          console.error('Profile fetch error:', profileError);
+          // Fallback to minimal user data if profile fetch fails
+          const fallbackUser = { id: result.user_id, name: result.name };
+          setUser(fallbackUser);
+          setIsAuthenticated(true);
+          localStorage.setItem('user', JSON.stringify(fallbackUser));
+          toast.success('Face verified, but profile fetch failed. Using basic info.');
+          return { success: true, newUser: false };
+        }
       } else {
-        // User not recognized
         return { success: false, newUser: true };
       }
     } catch (error) {

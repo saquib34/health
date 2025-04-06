@@ -100,18 +100,83 @@ export const authAPI = {
     }
   },
 
-  register: async (userData) => {
+  register: async (userData, faceImage = null) => {
     try {
-      const response = await api.post('/register', userData, {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
+      // Extract user data
+      const { user } = userData;
+      const { email, password, name, gender, dob, role } = user;
+
+      // Frontend validation
+      const errors = {};
+
+      // Email validation
+      if (!email || !email.trim()) {
+        errors.email = 'Email is required';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        errors.email = 'Invalid email format';
+      }
+
+      // Password validation
+      if (!password) {
+        errors.password = 'Password is required';
+      } else {
+        if (password.length < 8) {
+          errors.password = 'Password must be at least 8 characters';
         }
-      );
+        if (!/[A-Z]/.test(password)) {
+          errors.password = errors.password || '';
+          errors.password += ' Password must contain at least one uppercase letter.';
+        }
+        if (!/[0-9]/.test(password)) {
+          errors.password = errors.password || '';
+          errors.password += ' Password must contain at least one number.';
+        }
+      }
+
+      // Name validation
+      if (!name || !name.trim()) {
+        errors.name = 'Name is required';
+      }
+
+      // If there are validation errors, throw them
+      if (Object.keys(errors).length > 0) {
+        throw { detail: 'Validation failed', errors };
+      }
+
+      // Prepare form data for API call
+      const formData = new FormData();
+      formData.append('user', JSON.stringify({
+        email: email.toLowerCase().trim(),
+        password,
+        name,
+        gender: gender || 'other',
+        dob: dob || null,
+        role: role || 'patient'
+      }));
+      if (faceImage) {
+        formData.append('face_image', faceImage);
+      }
+
+      // Make API call
+      const response = await api.post('/register', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      const { access_token, user: registeredUser } = response.data;
+      if (access_token) {
+        localStorage.setItem('token', access_token);
+        localStorage.setItem('user', JSON.stringify(registeredUser));
+      }
+
       return response.data;
     } catch (error) {
       console.error('Registration error:', error);
-      throw error;
+      if (error.detail && error.errors) {
+        throw error; // Throw validation errors back to frontend
+      }
+      throw error.response?.data || { detail: 'Registration failed' };
     }
   },
 
@@ -119,24 +184,24 @@ export const authAPI = {
     try {
       const formData = new FormData();
       formData.append('face_image', imageBlob);
-      
+
       const response = await api.post('/verify-face', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
-      
+
       if (response.data.verified && response.data.token) {
         localStorage.setItem('token', response.data.token);
       }
-      
+
       return response.data;
     } catch (error) {
       console.error('Face verification error:', error);
       throw error;
     }
   },
-  
+
   logout: () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');

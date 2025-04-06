@@ -1,10 +1,10 @@
-// src/pages/Registration.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { User, Mail, Calendar, Users, ChevronRight, ChevronLeft } from 'lucide-react';
 
+import { authAPI } from '../services/api'; // Import updated authAPI
 import { useAssistant } from '../context/AssistantContext';
 import Button from '../components/Button';
 import Input from '../components/Input';
@@ -12,23 +12,20 @@ import { useAuth } from '../context/AuthContext';
 
 const Registration = () => {
   const navigate = useNavigate();
-  const location = useLocation(); // Use useLocation to access state
-  const [faceBlob, setFaceBlob] = useState(null); // New state for face blob
+  const location = useLocation();
+  const [faceBlob, setFaceBlob] = useState(null);
   const userId = `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
+  const { speak, displayMessage } = useAssistant();
+  const { setUserData } = useAuth();
+
   useEffect(() => {
-    // Check if there's a face blob passed via navigation state
     const state = location.state;
-    console.log('State:', state);
-    
     if (state && state.blob) {
       setFaceBlob(state.blob);
     }
   }, [location.state]);
-  
-  const { speak, displayMessage } = useAssistant();
-  const { setUserData } = useAuth();
-  
+
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     user: {
@@ -39,51 +36,37 @@ const Registration = () => {
       password: '',
       confirmPassword: ''
     },
-    face_image: faceBlob
+    face_image: null
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Page animations
+  // Real-time password strength indicators
+  const [passwordStrength, setPasswordStrength] = useState({
+    length: false,
+    uppercase: false,
+    number: false
+  });
+
   const containerVariants = {
     hidden: { opacity: 0 },
-    visible: { 
-      opacity: 1,
-      transition: { 
-        duration: 0.5,
-        when: "beforeChildren",
-        staggerChildren: 0.2
-      }
-    },
-    exit: {
-      opacity: 0,
-      transition: { duration: 0.3 }
-    }
+    visible: { opacity: 1, transition: { duration: 0.5, when: "beforeChildren", staggerChildren: 0.2 } },
+    exit: { opacity: 0, transition: { duration: 0.3 } }
   };
-  
+
   const formVariants = {
     hidden: { x: 20, opacity: 0 },
-    visible: { 
-      x: 0, 
-      opacity: 1,
-      transition: { duration: 0.4 }
-    },
-    exit: {
-      x: -20,
-      opacity: 0,
-      transition: { duration: 0.3 }
-    }
+    visible: { x: 0, opacity: 1, transition: { duration: 0.4 } },
+    exit: { x: -20, opacity: 0, transition: { duration: 0.3 } }
   };
-  
+
   useEffect(() => {
-    // Greeting on page load
     displayMessage("Let's get you registered with HealthAI. Please fill in your details.");
     speak("Let's get you registered with Health AI. Please fill in your personal details.");
   }, []);
-  
-  // Update assistant messages based on current step
+
   useEffect(() => {
-    switch(step) {
+    switch (step) {
       case 1:
         displayMessage("Please enter your full name and email address.");
         speak("Please enter your full name and email address.");
@@ -100,162 +83,145 @@ const Registration = () => {
         break;
     }
   }, [step]);
-  
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, user: { ...prev.user, [name]: value } }));
-    
+
     // Clear error when field is updated
     if (errors[name]) {
       setErrors(prev => ({ ...prev, [name]: null }));
     }
+
+    // Real-time password validation
+    if (name === 'password') {
+      setPasswordStrength({
+        length: value.length >= 8,
+        uppercase: /[A-Z]/.test(value),
+        number: /[0-9]/.test(value)
+      });
+    }
   };
-  
+
   const validateStep = () => {
-    const newErrors = { user: {} };
-    
-    switch(step) {
+    const newErrors = {};
+
+    switch (step) {
       case 1:
-        if (!formData.user.name.trim()) {
-          newErrors.user.name = 'Name is required';
-        }
-        
+        if (!formData.user.name.trim()) newErrors.name = 'Name is required';
         if (!formData.user.email.trim()) {
-          newErrors.user.email = 'Email is required';
+          newErrors.email = 'Email is required';
         } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.user.email)) {
-          newErrors.user.email = 'Email is invalid';
+          newErrors.email = 'Email is invalid';
         }
         break;
-        
       case 2:
         if (!formData.user.dob) {
-          newErrors.user.dob = 'Date of birth is required';
+          newErrors.dob = 'Date of birth is required';
         } else {
-          // Check if date is valid and not in the future
           const dobDate = new Date(formData.user.dob);
           const today = new Date();
           if (isNaN(dobDate.getTime())) {
-            newErrors.user.dob = 'Invalid date';
+            newErrors.dob = 'Invalid date';
           } else if (dobDate > today) {
-            newErrors.user.dob = 'Date cannot be in the future';
+            newErrors.dob = 'Date cannot be in the future';
           }
         }
-        
-        if (!formData.user.gender) {
-          newErrors.user.gender = 'Gender is required';
-        }
+        if (!formData.user.gender) newErrors.gender = 'Gender is required';
         break;
-        
       case 3:
         if (!formData.user.password) {
-          newErrors.user.password = 'Password is required';
-        } else if (formData.user.password.length < 8) {
-          newErrors.user.password = 'Password must be at least 8 characters';
+          newErrors.password = 'Password is required';
+        } else {
+          if (formData.user.password.length < 8) newErrors.password = 'Password must be at least 8 characters';
+          if (!/[A-Z]/.test(formData.user.password)) newErrors.password = newErrors.password ? `${newErrors.password}. Must contain an uppercase letter` : 'Must contain an uppercase letter';
+          if (!/[0-9]/.test(formData.user.password)) newErrors.password = newErrors.password ? `${newErrors.password}. Must contain a number` : 'Must contain a number';
         }
-        
         if (!formData.user.confirmPassword) {
-          newErrors.user.confirmPassword = 'Please confirm your password';
+          newErrors.confirmPassword = 'Please confirm your password';
         } else if (formData.user.password !== formData.user.confirmPassword) {
-          newErrors.user.confirmPassword = 'Passwords do not match';
+          newErrors.confirmPassword = 'Passwords do not match';
         }
         break;
-        
       default:
         break;
     }
-    
+
     setErrors(newErrors);
-    return Object.keys(newErrors.user).length === 0;
+    return Object.keys(newErrors).length === 0;
   };
-  
+
   const handleNext = () => {
     if (validateStep()) {
       setStep(prev => prev + 1);
     } else {
-      // Voice feedback for errors
       const errorKeys = Object.keys(errors);
-      if (errorKeys.length > 0) {
-        const firstError = errors[errorKeys[0]];
-        speak(firstError);
-      }
+      if (errorKeys.length > 0) speak(errors[errorKeys[0]]);
     }
   };
-  
+
   const handleBack = () => {
     setStep(prev => prev - 1);
   };
-// Fix for Registration.jsx handleSubmit
-const handleSubmit = async (e) => {
-  e.preventDefault();
 
-  if (!validateStep()) return;
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validateStep()) return;
+    if (isSubmitting) return;
 
-  // Prevent double submission
-  if (isSubmitting) return;
-  
-  setIsSubmitting(true);
-  
-  try {
-    // Generate unique ID if not already present
-    const uniqueUserId = userId || `user_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-    
-    // Prepare user data as a plain object
-    const userData = {
-      user: {
-        id: uniqueUserId,
-        email: formData.user.email.toLowerCase().trim(), // Normalize email
-        password: formData.user.password,
-        name: formData.user.name,
-        gender: formData.user.gender || 'other',
-        dob: formData.user.dob || null,
-        role: 'patient',
-        // Add a request ID to help with debugging
-        requestId: `req_${Date.now()}`
-      },
-      face_image: faceBlob // Keep the Blob/File reference
-    };
+    setIsSubmitting(true);
 
-    // Debugging log
-    console.log('Registration form data ready:', uniqueUserId);
-    
-    // Store in context for verification step
-    setUserData(userData);
-    
-    // Set a flag in localStorage to prevent duplicate submissions
-    localStorage.setItem('registration_in_progress', uniqueUserId);
-    
-    toast.success('Registration details saved successfully');
-    displayMessage("Great! Now we need to verify your Aadhaar card.");
-    speak("Your details have been saved successfully. Now we need to verify your Aadhaar card.");
-    
-    // Add a small delay to prevent navigation issues
-    setTimeout(() => {
-      // Use replace instead of push to prevent back navigation
-      navigate('/verification-complete', { replace: true });
-    }, 100);
-    
-  } catch (error) {
-    console.error('Registration error:', error);
-    toast.error('Registration failed. Please try again.');
-    
-    // Clean up storage on error
-    localStorage.removeItem('registration_in_progress');
-  } finally {
-    setIsSubmitting(false);
-  }
-};
-  
+    try {
+      const response = await authAPI.register(formData, faceBlob);
+
+      toast.success('Registration successful! Logging you in...');
+      displayMessage("Registration completed successfully!");
+      speak("Registration completed successfully! Welcome to HealthAI.");
+
+      setUserData({
+        user: response.user,
+        token: response.access_token
+      });
+
+      setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 1000);
+    } catch (error) {
+      console.error('Registration error:', error);
+      const errorMessage = error.errors
+        ? Object.values(error.errors).join(' ')
+        : error.detail || 'Registration failed. Please try again.';
+      toast.error(errorMessage);
+      speak(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isStepValid = () => {
+    switch (step) {
+      case 1:
+        return formData.user.name.trim() && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.user.email);
+      case 2:
+        return formData.user.dob && formData.user.gender && new Date(formData.user.dob) <= new Date();
+      case 3:
+        return (
+          formData.user.password &&
+          formData.user.password.length >= 8 &&
+          /[A-Z]/.test(formData.user.password) &&
+          /[0-9]/.test(formData.user.password) &&
+          formData.user.password === formData.user.confirmPassword
+        );
+      default:
+        return false;
+    }
+  };
+
   const renderFormStep = () => {
-    switch(step) {
+    switch (step) {
       case 1:
         return (
-          <motion.div
-            key="step1"
-            variants={formVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-          >
+          <motion.div key="step1" variants={formVariants} initial="hidden" animate="visible" exit="exit">
             <h2 className="text-xl font-semibold mb-4">Personal Information</h2>
             <div className="space-y-4">
               <Input
@@ -265,11 +231,10 @@ const handleSubmit = async (e) => {
                 value={formData.user.name}
                 onChange={handleChange}
                 placeholder="Enter your full name"
-                error={errors.user?.name}
+                error={errors.name}
                 icon={<User className="w-5 h-5 text-gray-400" />}
                 required
               />
-              
               <Input
                 label="Email Address"
                 type="email"
@@ -277,23 +242,16 @@ const handleSubmit = async (e) => {
                 value={formData.user.email}
                 onChange={handleChange}
                 placeholder="Enter your email address"
-                error={errors.user?.email}
+                error={errors.email}
                 icon={<Mail className="w-5 h-5 text-gray-400" />}
                 required
               />
             </div>
           </motion.div>
         );
-        
       case 2:
         return (
-          <motion.div
-            key="step2"
-            variants={formVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-          >
+          <motion.div key="step2" variants={formVariants} initial="hidden" animate="visible" exit="exit">
             <h2 className="text-xl font-semibold mb-4">Demographics</h2>
             <div className="space-y-4">
               <Input
@@ -302,11 +260,10 @@ const handleSubmit = async (e) => {
                 name="dob"
                 value={formData.user.dob}
                 onChange={handleChange}
-                error={errors.user?.dob}
+                error={errors.dob}
                 icon={<Calendar className="w-5 h-5 text-gray-400" />}
                 required
               />
-              
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">
                   Gender <span className="text-red-500">*</span>
@@ -315,12 +272,11 @@ const handleSubmit = async (e) => {
                   <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
                     <Users className="w-5 h-5" />
                   </div>
-                  
                   <select
                     name="gender"
                     value={formData.user.gender}
                     onChange={handleChange}
-                    className={`block w-full pl-10 pr-4 py-2 border ${errors.user?.gender ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-blue-500 focus:border-blue-500`}
+                    className={`block w-full pl-10 pr-4 py-2 border ${errors.gender ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-blue-500 focus:border-blue-500`}
                     required
                   >
                     <option value="">Select gender</option>
@@ -330,23 +286,14 @@ const handleSubmit = async (e) => {
                     <option value="prefer-not-to-say">Prefer not to say</option>
                   </select>
                 </div>
-                {errors.user?.gender && (
-                  <p className="text-red-500 text-xs mt-1">{errors.user.gender}</p>
-                )}
+                {errors.gender && <p className="text-red-500 text-xs mt-1">{errors.gender}</p>}
               </div>
             </div>
           </motion.div>
         );
-        
       case 3:
         return (
-          <motion.div
-            key="step3"
-            variants={formVariants}
-            initial="hidden"
-            animate="visible"
-            exit="exit"
-          >
+          <motion.div key="step3" variants={formVariants} initial="hidden" animate="visible" exit="exit">
             <h2 className="text-xl font-semibold mb-4">Security</h2>
             <div className="space-y-4">
               <Input
@@ -356,10 +303,9 @@ const handleSubmit = async (e) => {
                 value={formData.user.password}
                 onChange={handleChange}
                 placeholder="Create a password"
-                error={errors.user?.password}
+                error={errors.password}
                 required
               />
-              
               <Input
                 label="Confirm Password"
                 type="password"
@@ -367,111 +313,67 @@ const handleSubmit = async (e) => {
                 value={formData.user.confirmPassword}
                 onChange={handleChange}
                 placeholder="Confirm your password"
-                error={errors.user?.confirmPassword}
+                error={errors.confirmPassword}
                 required
               />
-              
+              <div className="mt-2 text-xs text-gray-500">
+                <p className={passwordStrength.length ? 'text-green-500' : 'text-red-500'}>
+                  {passwordStrength.length ? '✓' : '✗'} At least 8 characters
+                </p>
+                <p className={passwordStrength.uppercase ? 'text-green-500' : 'text-red-500'}>
+                  {passwordStrength.uppercase ? '✓' : '✗'} One uppercase letter
+                </p>
+                <p className={passwordStrength.number ? 'text-green-500' : 'text-red-500'}>
+                  {passwordStrength.number ? '✓' : '✗'} One number
+                </p>
+              </div>
               {faceBlob && (
                 <div className="mt-4">
                   <h3 className="text-lg font-medium">Face Image</h3>
-                  <img
-                    src={URL.createObjectURL(faceBlob)}
-                    alt="Face"
-                    className="w-32 h-32 rounded-full mt-2"
-                  />
+                  <img src={URL.createObjectURL(faceBlob)} alt="Face" className="w-32 h-32 rounded-full mt-2" />
                 </div>
               )}
-              
-              <div className="mt-2">
-                <ul className="text-xs text-gray-500 space-y-1">
-                  <li>Password must be at least 8 characters long</li>
-                  <li>Include at least one uppercase letter</li>
-                  <li>Include at least one number or special character</li>
-                </ul>
-              </div>
             </div>
           </motion.div>
         );
-        
       default:
         return null;
     }
   };
 
   return (
-    <motion.div
-      className="flex flex-col items-center justify-center min-h-screen p-4"
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-      exit="exit"
-    >
-      <motion.div
-        className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden"
-        variants={formVariants}
-      >
+    <motion.div className="flex flex-col items-center justify-center min-h-screen p-4" variants={containerVariants} initial="hidden" animate="visible" exit="exit">
+      <motion.div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden" variants={formVariants}>
         <div className="p-5 bg-gradient-to-r from-blue-600 to-indigo-700 text-white">
           <h1 className="text-2xl font-bold text-center">Create Your Account</h1>
           <div className="flex justify-center mt-4">
             <div className="flex items-center">
               {[1, 2, 3].map(i => (
                 <React.Fragment key={i}>
-                  <div 
-                    className={`flex items-center justify-center w-8 h-8 rounded-full text-sm ${
-                      i === step 
-                        ? 'bg-white text-blue-600' 
-                        : i < step 
-                          ? 'bg-blue-400 text-white' 
-                          : 'bg-blue-800 bg-opacity-40 text-white'
-                    }`}
-                  >
+                  <div className={`flex items-center justify-center w-8 h-8 rounded-full text-sm ${i === step ? 'bg-white text-blue-600' : i < step ? 'bg-blue-400 text-white' : 'bg-blue-800 bg-opacity-40 text-white'}`}>
                     {i}
                   </div>
-                  {i < 3 && (
-                    <div 
-                      className={`w-10 h-1 ${
-                        i < step ? 'bg-blue-400' : 'bg-blue-800 bg-opacity-40'
-                      }`}
-                    ></div>
-                  )}
+                  {i < 3 && <div className={`w-10 h-1 ${i < step ? 'bg-blue-400' : 'bg-blue-800 bg-opacity-40'}`}></div>}
                 </React.Fragment>
               ))}
             </div>
           </div>
         </div>
-        
         <div className="p-6">
           <form onSubmit={handleSubmit}>
             {renderFormStep()}
-            
             <div className="flex justify-between mt-6">
               {step > 1 && (
-                <Button
-                  type="button"
-                  onClick={handleBack}
-                  variant="outline"
-                  icon={<ChevronLeft className="w-4 h-4 mr-2" />}
-                >
+                <Button type="button" onClick={handleBack} variant="outline" icon={<ChevronLeft className="w-4 h-4 mr-2" />}>
                   Back
                 </Button>
               )}
-              
               {step < 3 ? (
-                <Button
-                  type="button"
-                  onClick={handleNext}
-                  className="ml-auto"
-                  icon={<ChevronRight className="w-4 h-4 ml-2" />}
-                  iconPosition="right"
-                >
+                <Button type="button" onClick={handleNext} className="ml-auto" icon={<ChevronRight className="w-4 h-4 ml-2" />} iconPosition="right" disabled={!isStepValid()}>
                   Next
                 </Button>
               ) : (
-                <Button
-                  type="submit"
-                  className="ml-auto"
-                  loading={isSubmitting}
-                >
+                <Button type="submit" className="ml-auto" loading={isSubmitting} disabled={!isStepValid() || isSubmitting}>
                   Complete Registration
                 </Button>
               )}

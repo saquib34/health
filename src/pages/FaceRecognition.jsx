@@ -238,28 +238,22 @@ const FaceRecognition = () => {
     try {
       setScanComplete(true);
       setIsCapturing(false);
-      
-      // Get face detection results
+  
       const detections = await faceapi.detectSingleFace(
         videoRef.current,
         new faceapi.TinyFaceDetectorOptions()
       ).withFaceLandmarks();
-      
-      if (!detections) {
-        throw new Error('No face detected');
-      }
   
-      // Extract face region using landmarks
+      if (!detections) throw new Error('No face detected');
+  
       const canvas = document.createElement('canvas');
       const box = detections.detection.box;
-      
-      // Add padding to capture full face
       const padding = 50;
       const x = Math.max(0, box.x - padding);
       const y = Math.max(0, box.y - padding);
       const width = Math.min(box.width + padding * 2, videoRef.current.videoWidth - x);
       const height = Math.min(box.height + padding * 2, videoRef.current.videoHeight - y);
-      
+  
       canvas.width = width;
       canvas.height = height;
       canvas.getContext('2d').drawImage(
@@ -267,10 +261,10 @@ const FaceRecognition = () => {
         x, y, width, height,
         0, 0, width, height
       );
-      
+  
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
       const result = await loginWithFace(blob);
-      
+  
       if (result.success) {
         setUserFound(true);
         setTimeout(() => navigate('/dashboard'), 1500);
@@ -281,9 +275,10 @@ const FaceRecognition = () => {
         setUserFound(false);
         setScanComplete(false);
         setScanProgress(0);
+        toast.error('Login failed. Please try again.');
       }
-      
     } catch (error) {
+      console.error('Face recognition processing error:', error);
       toast.error('Face verification failed. Please try again.');
       setIsCapturing(false);
       setScanComplete(false);
