@@ -188,19 +188,23 @@ const FaceRecognition = () => {
       if (!videoRef.current?.srcObject) return;
       
       try {
-        const detections = await faceapi.detectAllFaces(
-          videoRef.current, new faceapi.TinyFaceDetectorOptions()
+        const detection = await faceapi.detectSingleFace(
+          videoRef.current,
+          new faceapi.TinyFaceDetectorOptions()
         ).withFaceLandmarks();
         
-        const resizedDetections = faceapi.resizeResults(detections, displaySize);
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        faceapi.draw.drawDetections(canvas, resizedDetections);
-        faceapi.draw.drawFaceLandmarks(canvas, resizedDetections);
         
-        setFaceDetected(detections.length > 0);
+        if (detection) {
+          const resizedDetection = faceapi.resizeResults([detection], displaySize);
+          faceapi.draw.drawDetections(canvas, resizedDetection);
+          setFaceDetected(true);
+        } else {
+          setFaceDetected(false);
+        }
         
-        if (isCapturingRef.current && detections.length > 0) {
+        if (isCapturingRef.current && detection) {
           setScanProgress(prev => {
             const newProgress = Math.min(prev + 2, 100);
             if (newProgress === 100) {
@@ -230,16 +234,39 @@ const FaceRecognition = () => {
     displayMessage("Scanning your face. Please remain still.");
     speak("Scanning your face. Please remain still.");
   };
-
   const processFaceRecognition = async () => {
     try {
       setScanComplete(true);
       setIsCapturing(false);
       
+      // Get face detection results
+      const detections = await faceapi.detectSingleFace(
+        videoRef.current,
+        new faceapi.TinyFaceDetectorOptions()
+      ).withFaceLandmarks();
+      
+      if (!detections) {
+        throw new Error('No face detected');
+      }
+  
+      // Extract face region using landmarks
       const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth || 640;
-      canvas.height = videoRef.current.videoHeight || 480;
-      canvas.getContext('2d').drawImage(videoRef.current, 0, 0);
+      const box = detections.detection.box;
+      
+      // Add padding to capture full face
+      const padding = 50;
+      const x = Math.max(0, box.x - padding);
+      const y = Math.max(0, box.y - padding);
+      const width = Math.min(box.width + padding * 2, videoRef.current.videoWidth - x);
+      const height = Math.min(box.height + padding * 2, videoRef.current.videoHeight - y);
+      
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(
+        videoRef.current,
+        x, y, width, height,
+        0, 0, width, height
+      );
       
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.9));
       const result = await loginWithFace(blob);
