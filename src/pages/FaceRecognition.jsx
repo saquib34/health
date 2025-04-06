@@ -469,12 +469,7 @@ const FaceRecognition = () => {
             )}
             
             <div className="mt-4 text-center">
-              <button 
-                className="text-blue-600 hover:underline text-sm"
-                onClick={() => navigate('/register')}
-              >
-                Register manually instead
-              </button>
+            
             </div>
           </div>
         )}
