@@ -43,7 +43,7 @@ from io import BytesIO
 import cv2
 from pytorch_grad_cam import GradCAM
 from transformers import AutoImageProcessor, AutoModelForImageClassification, BlipProcessor, BlipForConditionalGeneration
-API_KEY = os.getenv("GEMINI_API_KEY", "Your Token")  # Replace with your actual key in production
+API_KEY = os.getenv("GEMINI_API_KEY", "REMOVED")  # Replace with your actual key in production
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel('gemini-2.0-flash') 
 # Load environment variables
@@ -58,6 +58,7 @@ class ChatRequest(BaseModel):
     
 # Import our model service
 # from models.service import model_service
+
 
 
 # Configure logging
@@ -84,6 +85,7 @@ try:
     # Test Redis connection with ping
     redis_client.ping()
     redis_available = True
+    
     logger.info(f"Redis connected at {redis_host}:{redis_port}")
 except Exception as e:
     logger.warning(f"Redis not available: {str(e)}")
@@ -110,7 +112,7 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("TOKEN_EXPIRE_MINUTES", "30"))
     MONGO_URI = os.getenv(
     "MONGO_URI",
-    f"your Mongo DB SERVER"
+    f"REMOVED"
 )
     DB_NAME = os.getenv("DB_NAME", "hospital_ai")
     STATIC_DIR = os.getenv("STATIC_DIR", "static")
@@ -118,6 +120,8 @@ class Settings:
     UPLOAD_DIR = os.path.join(STATIC_DIR, "uploads")
     MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", "10485760"))  # 10MB default
     ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "*").split(",")
+    
+    
     
     # Security settings
     PASSWORD_MIN_LENGTH = int(os.getenv("PASSWORD_MIN_LENGTH", "8"))
@@ -167,33 +171,41 @@ def calculate_severity(findings: list) -> int:
     
     return min(round(severity_score), 10)
 # Rate limiting middleware
+# In-memory rate limiting (for testing purposes)
+rate_limit = {}
+RATE_LIMIT_REQUESTS = 10  # Max requests allowed
+RATE_LIMIT_WINDOW = timedelta(minutes=1)  # Time window for rate limiting
+
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    # Get client IP
-    client_ip = request.client.host
+    # Get client IP (consider proxies)
+    client_ip = request.headers.get("x-forwarded-for", request.client.host)
     
     # Skip rate limiting for internal requests or when testing
     if client_ip == "127.0.0.1" or os.getenv("ENVIRONMENT") == "test":
         return await call_next(request)
-    
-    # In production, use a proper rate limiting solution like Redis
-    # For simplicity, we're using a basic in-memory approach
+
+    # Rate limit logic
     current_time = datetime.utcnow()
-    
-    # This would be a Redis call in production
-    request_count = 1  # Get count from Redis
-    
-    if request_count > settings.RATE_LIMIT_REQUESTS:
+    if client_ip not in rate_limit:
+        rate_limit[client_ip] = {"count": 1, "start_time": current_time}
+    else:
+        elapsed_time = current_time - rate_limit[client_ip]["start_time"]
+        if elapsed_time > RATE_LIMIT_WINDOW:
+            rate_limit[client_ip] = {"count": 1, "start_time": current_time}
+        else:
+            rate_limit[client_ip]["count"] += 1
+
+    # Check rate limit
+    if rate_limit[client_ip]["count"] > RATE_LIMIT_REQUESTS:
         return JSONResponse(
             status_code=429,
             content={"detail": "Too many requests. Please try again later."}
         )
-    
-    # Increment counter in Redis
-    
+
+    # Call next middleware/route
     response = await call_next(request)
     return response
-
 # Mount static files directory
 app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")
 
@@ -238,10 +250,232 @@ def get_db():
     except errors.ServerSelectionTimeoutError as e:
         logger.error(f"MongoDB connection error: {e}")
         raise Exception("Database connection failed")
-
+# def seed_doctors_data():
+# # Load seed data for doctors
+#     if doctors_collection.count_documents({}) == 0:
+#         seed_doctors=[
+#     # Original doctors with extended availability
+#     # General Practitioners 
+#         {"name": "Dr. Sharma", "specialty": "General Practitioner", "experience": "15 years", "rating": 4.9, 
+#         "availability": ["2025-03-03", "2025-03-04", "2025-03-05", "2025-03-10", "2025-03-11", "2025-03-12", 
+#                         "2025-03-17", "2025-03-18", "2025-03-19", "2025-03-24", "2025-03-25", "2025-03-26", "2025-03-31"]},
+                        
+#         {"name": "Dr. Verma", "specialty": "General Practitioner", "experience": "10 years", "rating": 4.7, 
+#         "availability": ["2025-03-06", "2025-03-07", "2025-03-08", "2025-03-13", "2025-03-14", "2025-03-15", 
+#                         "2025-03-20", "2025-03-21", "2025-03-22", "2025-03-27", "2025-03-28", "2025-03-29"]},
+                        
+#         # Cardiologists 
+#         {"name": "Dr. Patel", "specialty": "Cardiologist", "experience": "12 years", "rating": 4.8, 
+#         "availability": ["2025-03-04", "2025-03-06", "2025-03-07", "2025-03-11", "2025-03-13", "2025-03-14", 
+#                         "2025-03-18", "2025-03-20", "2025-03-21", "2025-03-25", "2025-03-27", "2025-03-28"]},
+                        
+#         {"name": "Dr. Mehta", "specialty": "Cardiologist", "experience": "14 years", "rating": 4.9, 
+#         "availability": ["2025-03-05", "2025-03-07", "2025-03-09", "2025-03-12", "2025-03-14", "2025-03-16", 
+#                         "2025-03-19", "2025-03-21", "2025-03-23", "2025-03-26", "2025-03-28", "2025-03-30"]},
+                        
+#         # Pulmonologists 
+#         {"name": "Dr. Gupta", "specialty": "Pulmonologist", "experience": "10 years", "rating": 4.7, 
+#         "availability": ["2025-03-02", "2025-03-05", "2025-03-08", "2025-03-11", "2025-03-14", "2025-03-17", 
+#                         "2025-03-20", "2025-03-23", "2025-03-26", "2025-03-29"]},
+                        
+#         {"name": "Dr. Rao", "specialty": "Pulmonologist", "experience": "11 years", "rating": 4.6, 
+#         "availability": ["2025-03-04", "2025-03-06", "2025-03-09", "2025-03-11", "2025-03-13", "2025-03-16", 
+#                         "2025-03-18", "2025-03-20", "2025-03-23", "2025-03-25", "2025-03-27", "2025-03-30"]},
+                        
+#         # Neurologists 
+#         {"name": "Dr. Khan", "specialty": "Neurologist", "experience": "18 years", "rating": 4.9, 
+#         "availability": ["2025-03-03", "2025-03-07", "2025-03-09", "2025-03-13", "2025-03-17", "2025-03-21", 
+#                         "2025-03-24", "2025-03-28", "2025-03-31"]},
+                        
+#         {"name": "Dr. Nair", "specialty": "Neurologist", "experience": "16 years", "rating": 4.8, 
+#         "availability": ["2025-03-02", "2025-03-05", "2025-03-08", "2025-03-12", "2025-03-15", "2025-03-19", 
+#                         "2025-03-22", "2025-03-26", "2025-03-29"]},
+                        
+#         # Dermatologists 
+#         {"name": "Dr. Reddy", "specialty": "Dermatologist", "experience": "8 years", "rating": 4.6, 
+#         "availability": ["2025-03-02", "2025-03-04", "2025-03-06", "2025-03-10", "2025-03-12", "2025-03-14", 
+#                         "2025-03-18", "2025-03-20", "2025-03-24", "2025-03-26", "2025-03-28", "2025-03-31"]},
+                        
+#         {"name": "Dr. Iyer", "specialty": "Dermatologist", "experience": "9 years", "rating": 4.7, 
+#         "availability": ["2025-03-05", "2025-03-07", "2025-03-09", "2025-03-12", "2025-03-15", "2025-03-19", 
+#                         "2025-03-21", "2025-03-23", "2025-03-26", "2025-03-28", "2025-03-30"]},
+                        
+#         # ENT Specialists 
+#         {"name": "Dr. Singh", "specialty": "ENT Specialist", "experience": "14 years", "rating": 4.8, 
+#         "availability": ["2025-03-03", "2025-03-05", "2025-03-08", "2025-03-10", "2025-03-12", "2025-03-15", 
+#                         "2025-03-17", "2025-03-19", "2025-03-22", "2025-03-24", "2025-03-26", "2025-03-29", "2025-03-31"]},
+                        
+#         {"name": "Dr. Banerjee", "specialty": "ENT Specialist", "experience": "12 years", "rating": 4.7, 
+#         "availability": ["2025-03-04", "2025-03-06", "2025-03-09", "2025-03-11", "2025-03-13", "2025-03-16", 
+#                         "2025-03-18", "2025-03-20", "2025-03-23", "2025-03-25", "2025-03-27", "2025-03-30"]},
+                        
+#         # Endocrinologists 
+#         {"name": "Dr. Menon", "specialty": "Endocrinologist", "experience": "13 years", "rating": 4.8, 
+#         "availability": ["2025-03-03", "2025-03-06", "2025-03-09", "2025-03-12", "2025-03-15", "2025-03-18", 
+#                         "2025-03-21", "2025-03-24", "2025-03-27", "2025-03-30"]},
+                        
+#         {"name": "Dr. Bhaskar", "specialty": "Endocrinologist", "experience": "12 years", "rating": 4.7, 
+#         "availability": ["2025-03-04", "2025-03-07", "2025-03-08", "2025-03-11", "2025-03-14", "2025-03-15", 
+#                         "2025-03-18", "2025-03-21", "2025-03-22", "2025-03-25", "2025-03-28", "2025-03-29"]},
+                        
+#         # Gastroenterologists 
+#         {"name": "Dr. Kulkarni", "specialty": "Gastroenterologist", "experience": "15 years", "rating": 4.9, 
+#         "availability": ["2025-03-05", "2025-03-07", "2025-03-09", "2025-03-12", "2025-03-14", "2025-03-16", 
+#                         "2025-03-19", "2025-03-21", "2025-03-23", "2025-03-26", "2025-03-28", "2025-03-30"]},
+                        
+#         {"name": "Dr. Joshi", "specialty": "Gastroenterologist", "experience": "11 years", "rating": 4.6, 
+#         "availability": ["2025-03-03", "2025-03-06", "2025-03-08", "2025-03-10", "2025-03-13", "2025-03-15", 
+#                         "2025-03-17", "2025-03-20", "2025-03-22", "2025-03-24", "2025-03-27", "2025-03-29", "2025-03-31"]},
+                        
+#         # Pediatricians 
+#         {"name": "Dr. Das", "specialty": "Pediatrician", "experience": "9 years", "rating": 4.7, 
+#         "availability": ["2025-03-04", "2025-03-07", "2025-03-09", "2025-03-11", "2025-03-14", "2025-03-16", 
+#                         "2025-03-18", "2025-03-21", "2025-03-23", "2025-03-25", "2025-03-28", "2025-03-30"]},
+                        
+#         {"name": "Dr. Mukherjee", "specialty": "Pediatrician", "experience": "10 years", "rating": 4.8, 
+#         "availability": ["2025-03-03", "2025-03-06", "2025-03-08", "2025-03-10", "2025-03-13", "2025-03-15", 
+#                         "2025-03-17", "2025-03-20", "2025-03-22", "2025-03-24", "2025-03-27", "2025-03-29", "2025-03-31"]},
+                        
+#         # Orthopedists 
+#         {"name": "Dr. Choudhary", "specialty": "Orthopedist", "experience": "17 years", "rating": 4.9, 
+#         "availability": ["2025-03-02", "2025-03-05", "2025-03-09", "2025-03-12", "2025-03-16", "2025-03-19", 
+#                         "2025-03-23", "2025-03-26", "2025-03-30"]},
+                        
+#         {"name": "Dr. Mishra", "specialty": "Orthopedist", "experience": "16 years", "rating": 4.8, 
+#         "availability": ["2025-03-04", "2025-03-07", "2025-03-08", "2025-03-11", "2025-03-14", "2025-03-15", 
+#                         "2025-03-18", "2025-03-21", "2025-03-22", "2025-03-25", "2025-03-28", "2025-03-29"]},
+        
+#         # Previously added specialists
+#         {"name": "Dr. Agarwal", "specialty": "Ophthalmologist", "experience": "14 years", "rating": 4.8, 
+#         "availability": ["2025-03-03", "2025-03-05", "2025-03-10", "2025-03-12", "2025-03-17", "2025-03-19", 
+#                         "2025-03-24", "2025-03-26", "2025-03-31"]},
+                        
+#         {"name": "Dr. Chawla", "specialty": "Psychiatrist", "experience": "11 years", "rating": 4.7, 
+#         "availability": ["2025-03-06", "2025-03-09", "2025-03-13", "2025-03-16", "2025-03-20", "2025-03-23", 
+#                         "2025-03-27", "2025-03-30"]},
+                        
+#         {"name": "Dr. Kapoor", "specialty": "Urologist", "experience": "13 years", "rating": 4.8, 
+#         "availability": ["2025-03-04", "2025-03-07", "2025-03-11", "2025-03-14", "2025-03-18", "2025-03-21", 
+#                         "2025-03-25", "2025-03-28", "2025-03-31"]},
+        
+#         # NEW ADDITIONS - Adding more doctors and specialties
+#         # More General Practitioners
+#         {"name": "Dr. Kumar", "specialty": "General Practitioner", "experience": "8 years", "rating": 4.6, 
+#         "availability": ["2025-03-02", "2025-03-03", "2025-03-09", "2025-03-10", "2025-03-16", "2025-03-17", 
+#                         "2025-03-23", "2025-03-24", "2025-03-30", "2025-03-31"]},
+                        
+#         {"name": "Dr. Ahuja", "specialty": "General Practitioner", "experience": "20 years", "rating": 4.9, 
+#         "availability": ["2025-03-04", "2025-03-05", "2025-03-11", "2025-03-12", "2025-03-18", "2025-03-19", 
+#                         "2025-03-25", "2025-03-26"]},
+        
+#         # More Cardiologists
+#         {"name": "Dr. Desai", "specialty": "Cardiologist", "experience": "22 years", "rating": 5.0, 
+#         "availability": ["2025-03-03", "2025-03-10", "2025-03-17", "2025-03-24", "2025-03-31"]},
+                        
+#         {"name": "Dr. Malhotra", "specialty": "Cardiologist", "experience": "9 years", "rating": 4.5, 
+#         "availability": ["2025-03-02", "2025-03-04", "2025-03-06", "2025-03-09", "2025-03-11", "2025-03-13", 
+#                         "2025-03-16", "2025-03-18", "2025-03-20", "2025-03-23", "2025-03-25", "2025-03-27", "2025-03-30"]},
+        
+#         # Rheumatologists
+#         {"name": "Dr. Shetty", "specialty": "Rheumatologist", "experience": "15 years", "rating": 4.8, 
+#         "availability": ["2025-03-05", "2025-03-06", "2025-03-12", "2025-03-13", "2025-03-19", "2025-03-20", 
+#                         "2025-03-26", "2025-03-27"]},
+                        
+#         {"name": "Dr. Bajaj", "specialty": "Rheumatologist", "experience": "13 years", "rating": 4.7, 
+#         "availability": ["2025-03-02", "2025-03-09", "2025-03-16", "2025-03-23", "2025-03-30"]},
+        
+#         # Oncologists
+#         {"name": "Dr. Arora", "specialty": "Oncologist", "experience": "18 years", "rating": 4.9, 
+#         "availability": ["2025-03-03", "2025-03-05", "2025-03-07", "2025-03-10", "2025-03-12", "2025-03-14", 
+#                         "2025-03-17", "2025-03-19", "2025-03-21", "2025-03-24", "2025-03-26", "2025-03-28", "2025-03-31"]},
+                        
+#         {"name": "Dr. Goel", "specialty": "Oncologist", "experience": "20 years", "rating": 5.0, 
+#         "availability": ["2025-03-04", "2025-03-11", "2025-03-18", "2025-03-25"]},
+        
+#         # Gynecologists
+#         {"name": "Dr. Lal", "specialty": "Gynecologist", "experience": "14 years", "rating": 4.8, 
+#         "availability": ["2025-03-03", "2025-03-05", "2025-03-07", "2025-03-10", "2025-03-12", "2025-03-14", 
+#                         "2025-03-17", "2025-03-19", "2025-03-21", "2025-03-24", "2025-03-26", "2025-03-28", "2025-03-31"]},
+                        
+#         {"name": "Dr. Chakraborty", "specialty": "Gynecologist", "experience": "16 years", "rating": 4.9, 
+#         "availability": ["2025-03-04", "2025-03-06", "2025-03-11", "2025-03-13", "2025-03-18", "2025-03-20", 
+#                         "2025-03-25", "2025-03-27"]},
+        
+#         # Nephrologists
+#         {"name": "Dr. Bedi", "specialty": "Nephrologist", "experience": "12 years", "rating": 4.7, 
+#         "availability": ["2025-03-02", "2025-03-04", "2025-03-09", "2025-03-11", "2025-03-16", "2025-03-18", 
+#                         "2025-03-23", "2025-03-25", "2025-03-30"]},
+                        
+#         {"name": "Dr. Saxena", "specialty": "Nephrologist", "experience": "17 years", "rating": 4.8, 
+#         "availability": ["2025-03-05", "2025-03-12", "2025-03-19", "2025-03-26"]},
+        
+#         # More Neurologists
+#         {"name": "Dr. Krishnan", "specialty": "Neurologist", "experience": "21 years", "rating": 5.0, 
+#         "availability": ["2025-03-06", "2025-03-13", "2025-03-20", "2025-03-27"]},
+                        
+#         {"name": "Dr. Hegde", "specialty": "Neurologist", "experience": "19 years", "rating": 4.9, 
+#         "availability": ["2025-03-02", "2025-03-09", "2025-03-16", "2025-03-23", "2025-03-30"]},
+        
+#         # More Ophthalmologists
+#         {"name": "Dr. Thakur", "specialty": "Ophthalmologist", "experience": "11 years", "rating": 4.6, 
+#         "availability": ["2025-03-04", "2025-03-06", "2025-03-11", "2025-03-13", "2025-03-18", "2025-03-20", 
+#                         "2025-03-25", "2025-03-27"]},
+                        
+#         {"name": "Dr. Handa", "specialty": "Ophthalmologist", "experience": "15 years", "rating": 4.8, 
+#         "availability": ["2025-03-02", "2025-03-07", "2025-03-09", "2025-03-14", "2025-03-16", "2025-03-21", 
+#                         "2025-03-23", "2025-03-28", "2025-03-30"]},
+        
+#         # Allergists
+#         {"name": "Dr. Mehra", "specialty": "Allergist", "experience": "13 years", "rating": 4.7, 
+#         "availability": ["2025-03-03", "2025-03-06", "2025-03-10", "2025-03-13", "2025-03-17", "2025-03-20", 
+#                         "2025-03-24", "2025-03-27", "2025-03-31"]},
+                        
+#         {"name": "Dr. Tandon", "specialty": "Allergist", "experience": "10 years", "rating": 4.6, 
+#         "availability": ["2025-03-05", "2025-03-07", "2025-03-12", "2025-03-14", "2025-03-19", "2025-03-21", 
+#                         "2025-03-26", "2025-03-28"]},
+        
+#         # Geriatricians
+#         {"name": "Dr. Khanna", "specialty": "Geriatrician", "experience": "16 years", "rating": 4.8, 
+#         "availability": ["2025-03-02", "2025-03-04", "2025-03-09", "2025-03-11", "2025-03-16", "2025-03-18", 
+#                         "2025-03-23", "2025-03-25", "2025-03-30"]},
+                        
+#         {"name": "Dr. Sethi", "specialty": "Geriatrician", "experience": "14 years", "rating": 4.7, 
+#         "availability": ["2025-03-06", "2025-03-13", "2025-03-20", "2025-03-27"]},
+        
+#         # Sports Medicine Specialists
+#         {"name": "Dr. Aggarwal", "specialty": "Sports Medicine", "experience": "12 years", "rating": 4.8, 
+#         "availability": ["2025-03-03", "2025-03-05", "2025-03-07", "2025-03-10", "2025-03-12", "2025-03-14", 
+#                         "2025-03-17", "2025-03-19", "2025-03-21", "2025-03-24", "2025-03-26", "2025-03-28", "2025-03-31"]},
+                        
+#         {"name": "Dr. Bhattacharya", "specialty": "Sports Medicine", "experience": "9 years", "rating": 4.6, 
+#         "availability": ["2025-03-02", "2025-03-04", "2025-03-06", "2025-03-09", "2025-03-11", "2025-03-13", 
+#                         "2025-03-16", "2025-03-18", "2025-03-20", "2025-03-23", "2025-03-25", "2025-03-27", "2025-03-30"]},
+        
+#         # Hematologists
+#         {"name": "Dr. Tiwari", "specialty": "Hematologist", "experience": "15 years", "rating": 4.8, 
+#         "availability": ["2025-03-04", "2025-03-11", "2025-03-18", "2025-03-25"]},
+                        
+#         {"name": "Dr. Madan", "specialty": "Hematologist", "experience": "18 years", "rating": 4.9, 
+#         "availability": ["2025-03-06", "2025-03-07", "2025-03-13", "2025-03-14", "2025-03-20", "2025-03-21", 
+#                         "2025-03-27", "2025-03-28"]},
+        
+#         # Infectious Disease Specialists
+#         {"name": "Dr. Gill", "specialty": "Infectious Disease", "experience": "14 years", "rating": 4.8, 
+#         "availability": ["2025-03-03", "2025-03-10", "2025-03-17", "2025-03-24", "2025-03-31"]},
+                        
+#         {"name": "Dr. Goswami", "specialty": "Infectious Disease", "experience": "12 years", "rating": 4.7, 
+#         "availability": ["2025-03-05", "2025-03-07", "2025-03-12", "2025-03-14", "2025-03-19", "2025-03-21", 
+#                         "2025-03-26", "2025-03-28"]}
+#     ]
+    
+#     # Initialize seed_doctors as an empty list
+#     doctors_collection.insert_many(seed_doctors)
+    logger.info("Expanded doctor data with 45 doctors and extended March 2025 availability added to database")
 # Initialize database and collections
 try:
     db = get_db()
+    
+        
     
     # Define collections
     users_collection = db["users"]
@@ -254,7 +488,12 @@ try:
     appointments_collection = db["appointments"]
     health_assessments_collection = db["health_assessments"]
     audit_logs_collection = db["audit_logs"]
+
     
+        
+    
+    
+    # seed_doctors_data()
     # Ensure indexes for performance and constraints
     users_collection.create_index([("email", ASCENDING)], unique=True)
     users_collection.create_index([("created_at", DESCENDING)])
@@ -416,7 +655,7 @@ async def health_check():
     return {
         "status": "operational",
         "database": db_status,
-        "model_status": model_status,
+        # "model_status": model_status,
         "environment": os.getenv("ENVIRONMENT", "development"),
         "version": app.__dict__.get("version", "3.0.0"),
         "timestamp": datetime.utcnow().isoformat()
@@ -1084,10 +1323,18 @@ You are a medical assistant designed to simulate a doctor chatting with a patien
 2. Continue asking follow-up questions until you have sufficient information to make an informed diagnosis.
 3. Once you have enough data, analyze the information, predict possible diseases, and provide recommendations (e.g., possible medicines or actions).
 4. Maintain a natural, empathetic tone like a doctor.
+5. And when you're done, you can end the conversation don't ask for any more information.
+6. also at last recommend the doctor to the patient from the list of doctors available.
 
 For each response, either:
 - Ask a single follow-up question to gather more details, OR
-- Provide a diagnosis and recommendations if you have enough information.
+- Provide a diagnosis and recommendations if you have enough information and if you think any lab tests or procedures are necessary.
+- If you have enough information, start your response with 'FINAL DIAGNOSIS:' followed by a JSON object containing:
+  {
+    "diagnosis": "string",
+    "recommendations": ["string"],
+    "doctor_specialty": "string"
+  }
 
 Example flow:
 - User: "I have a fever."
@@ -1095,6 +1342,13 @@ Example flow:
 - User: "Since yesterday, and I have a sore throat."
 - You: "Is the sore throat constant, and have you noticed any swelling or difficulty swallowing?"
 - (Continues until sufficient data is gathered, then provides diagnosis and advice.)
+- - You: "FINAL DIAGNOSIS: ```json
+  {
+    \"diagnosis\": \"Tonsillitis\",
+    \"recommendations\": [\"Rest and hydrate\", \"Consider over-the-counter pain relief\", \"See a doctor if symptoms worsen\", \"Consider a throat swab test if fever persists\"],
+    \"doctor_specialty\": \"ENT Specialist\"
+  }
+  ```"
 
 If the user provides context about patient data, medical history, or vital signs, incorporate that into your questions and analysis.
 """
@@ -1133,21 +1387,65 @@ async def analyze_intent(request: ChatRequest):
         response = model.generate_content(prompt)
         print(response)
         assistant_message = response.text.strip()
+        if assistant_message.startswith("FINAL DIAGNOSIS:"):
+            try:
+                # Extract JSON from the response
+                json_start = assistant_message.find("```json") + len("```json")
+                json_end = assistant_message.find("```", json_start)
+                json_str = assistant_message[json_start:json_end].strip()
+                final_data = json.loads(json_str)
 
-        # Add assistant response to history
-        history.append({"role": "assistant", "content": assistant_message})
+                diagnosis = final_data.get("diagnosis", "Unknown")
+                recommendations = final_data.get("recommendations", [])
+                doctor_specialty = final_data.get("doctor_specialty", "General Practitioner")
 
-        # Update conversation history
-        conversations[session_token] = history
+                # Find a doctor from seed_doctors
+                
+                doctor = doctors_collection.find_one({"specialty": doctor_specialty})
+                if doctor:
+                    doctor_info = f"{doctor['name']}, a {doctor['specialty']} with {doctor['experience']} experience and rating {doctor['rating']}"
+                else:
+                    doctor_info = "a General Practitioner"
 
-        # Return response with session token
-        return {
-            "response": assistant_message,
-            "session_token": session_token,
-            "timestamp": datetime.utcnow().isoformat()
-        }
+                # Construct the response
+                response_text = f"Based on your symptoms, the possible diagnosis is: {diagnosis}\n\n"
+                response_text += "Recommendations:\n" + "\n".join([f"- {rec}" for rec in recommendations]) + "\n\n"
+                response_text += f"We recommend consulting with {doctor_info} for further evaluation."
+
+                # Add to history
+                history.append({"role": "assistant", "content": response_text})
+                conversations[session_token] = history
+
+                return {
+                    "response": response_text,
+                    "session_token": session_token,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "is_final": True
+                }
+            except json.JSONDecodeError:
+                logger.error("Failed to parse final diagnosis JSON")
+                response_text = "I’ve analyzed your symptoms and prepared a diagnosis. Please consult a healthcare professional for further evaluation."
+                history.append({"role": "assistant", "content": response_text})
+                conversations[session_token] = history
+                return {
+                    "response": response_text,
+                    "session_token": session_token,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "is_final": True
+                }
+        else:
+            # Treat as a follow-up question
+            history.append({"role": "assistant", "content": assistant_message})
+            conversations[session_token] = history
+            return {
+                "response": assistant_message,
+                "session_token": session_token,
+                "timestamp": datetime.utcnow().isoformat(),
+                "is_final": False
+            }
 
     except Exception as e:
+        logger.error(f"Error processing request: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 # 
 
@@ -2507,58 +2805,12 @@ async def get_user_profile(current_user: dict = Depends(get_current_user)):
 
 # Keep the remaining routes (analyze-blood-report, analyze-xray, etc.) with the same simplification approach
 
+
 # Main application
 if __name__ == "__main__":
     import uvicorn
     
-    # Load seed data for doctors
-    if doctors_collection.count_documents({}) == 0:
-        seed_doctors = [
-            {
-                "name": "Dr. Sharma",
-                "specialty": "General Practitioner",
-                "experience": "15 years",
-                "rating": 4.9,
-                "availability": ["2025-03-03", "2025-03-04", "2025-03-05"]
-            },
-            {
-                "name": "Dr. Patel",
-                "specialty": "Cardiologist",
-                "experience": "12 years",
-                "rating": 4.8,
-                "availability": ["2025-03-04", "2025-03-06", "2025-03-07"]
-            },
-            {
-                "name": "Dr. Gupta",
-                "specialty": "Pulmonologist",
-                "experience": "10 years",
-                "rating": 4.7,
-                "availability": ["2025-03-02", "2025-03-05", "2025-03-08"]
-            },
-            {
-                "name": "Dr. Khan",
-                "specialty": "Neurologist",
-                "experience": "18 years",
-                "rating": 4.9,
-                "availability": ["2025-03-03", "2025-03-07", "2025-03-09"]
-            },
-            {
-                "name": "Dr. Reddy",
-                "specialty": "Dermatologist",
-                "experience": "8 years",
-                "rating": 4.6,
-                "availability": ["2025-03-02", "2025-03-04", "2025-03-06"]
-            },
-            {
-                "name": "Dr. Singh",
-                "specialty": "ENT Specialist",
-                "experience": "14 years",
-                "rating": 4.8,
-                "availability": ["2025-03-03", "2025-03-05", "2025-03-08"]
-            }
-        ]
-        doctors_collection.insert_many(seed_doctors)
-        logger.info("Seed doctor data added to database")
+   
     
     # Start server
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
