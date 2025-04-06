@@ -43,7 +43,7 @@ from io import BytesIO
 import cv2
 from pytorch_grad_cam import GradCAM
 from transformers import AutoImageProcessor, AutoModelForImageClassification, BlipProcessor, BlipForConditionalGeneration
-API_KEY = os.getenv("GEMINI_API_KEY", "REMOVED")  # Replace with your actual key in production
+API_KEY = os.getenv("GEMINI_API_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")  # Replace with your actual key in production
 genai.configure(api_key=API_KEY)
 model = genai.GenerativeModel('gemini-2.0-flash') 
 # Load environment variables
@@ -112,7 +112,7 @@ class Settings:
     ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("TOKEN_EXPIRE_MINUTES", "30"))
     MONGO_URI = os.getenv(
     "MONGO_URI",
-    f"REMOVED"
+    f"use your own"
 )
     DB_NAME = os.getenv("DB_NAME", "hospital_ai")
     STATIC_DIR = os.getenv("STATIC_DIR", "static")
